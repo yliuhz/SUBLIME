@@ -101,6 +101,8 @@ class GCL(nn.Module):
     def __init__(self, nlayers, in_dim, hidden_dim, emb_dim, proj_dim, dropout, dropout_adj, sparse):
         super(GCL, self).__init__()
 
+        if proj_dim > emb_dim:
+            proj_dim = emb_dim ## 
         self.encoder = GraphEncoder(nlayers, in_dim, hidden_dim, emb_dim, proj_dim, dropout, dropout_adj, sparse)
 
     def forward(self, x, Adj_, branch=None):

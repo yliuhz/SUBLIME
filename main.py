@@ -15,6 +15,11 @@ import dgl
 
 import random
 
+import setproctitle
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')  # - %(name)s
+logger = logging.getLogger(__file__)
+
 EOS = 1e-10
 
 class Experiment:
@@ -140,6 +145,7 @@ class Experiment:
             args.ntrials = 1
 
         for trial in range(args.ntrials):
+            setproctitle.setproctitle(f"SUBLIME#{trial}#{args.rep_dim}")
 
             self.setup_seed(trial)
 
@@ -220,7 +226,7 @@ class Experiment:
                     else:
                         anchor_adj = anchor_adj * args.tau + Adj.detach() * (1 - args.tau)
 
-                print("Epoch {:05d} | CL Loss {:.4f}".format(epoch, loss.item()))
+                logger.info("Epoch {:05d} | CL Loss {:.4f}".format(epoch, loss.item()))
 
                 if epoch % args.eval_freq == 0:
                     if args.downstream_task == 'classification':
@@ -263,14 +269,24 @@ class Experiment:
             if args.downstream_task == 'classification':
                 validation_accuracies.append(best_val.item())
                 test_accuracies.append(best_val_test.item())
-                print("Trial: ", trial + 1)
-                print("Best val ACC: ", best_val.item())
-                print("Best test ACC: ", best_val_test.item())
+                logger.info(f"Trial: {trial + 1}")
+                logger.info(f"Best val ACC: {best_val.item()}")
+                logger.info(f"Best test ACC: {best_val_test.item()}")
             elif args.downstream_task == 'clustering':
-                print("Final ACC: ", acc)
-                print("Final NMI: ", nmi)
-                print("Final F-score: ", f1)
-                print("Final ARI: ", ari)
+                logger.info(f"Final ACC: {acc}")
+                logger.info(f"Final NMI: {nmi}")
+                logger.info(f"Final F-score: {f1}")
+                logger.info(f"Final ARI: {ari}")
+
+            with torch.no_grad():
+                model.eval()
+                graph_learner.eval()
+                _, embedding = model(features, Adj)
+                embedding = embedding.cpu().detach().numpy()
+
+                import os
+                os.makedirs("outputs", exist_ok=True)
+                np.savez(f"outputs/SUBLIME_{args.dataset}_emb_{args.rep_dim}_{trial}.npz", emb=embedding, labels=labels.cpu().numpy())
 
         if args.downstream_task == 'classification' and trial != 0:
             self.print_results(validation_accuracies, test_accuracies)
@@ -279,11 +295,13 @@ class Experiment:
     def print_results(self, validation_accu, test_accu):
         s_val = "Val accuracy: {:.4f} +/- {:.4f}".format(np.mean(validation_accu), np.std(validation_accu))
         s_test = "Test accuracy: {:.4f} +/- {:.4f}".format(np.mean(test_accu),np.std(test_accu))
-        print(s_val)
-        print(s_test)
+        logger.info(s_val)
+        logger.info(s_test)
 
 
 if __name__ == '__main__':
+    
+
     parser = argparse.ArgumentParser()
     # Experimental setting
     parser.add_argument('-dataset', type=str, default='cora',
@@ -335,6 +353,7 @@ if __name__ == '__main__':
     parser.add_argument('-c', type=int, default=0)
 
     args = parser.parse_args()
+    logger.info(f"{args}")
 
     experiment = Experiment()
     experiment.train(args)
